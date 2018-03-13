@@ -80,6 +80,15 @@ public class MainActivity extends WearableActivity {
         MainActivityPermissionsDispatcher.initPermissionWithPermissionCheck(this);
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 绑定BLE的服务
+        Intent bindIntent = new Intent(this, BleService.class);
+        startService(bindIntent);
+        bindService(bindIntent, mServiceConnection, Context.BIND_AUTO_CREATE);
+    }
+
     private void initView() {
         // Enables Always-on
         setAmbientEnabled();
@@ -96,10 +105,13 @@ public class MainActivity extends WearableActivity {
 
         // 注册 EventBus
         EventBus.getDefault().register(this);
-        // 绑定BLE的服务
-        Intent bindIntent = new Intent(this, BleService.class);
-        startService(bindIntent);
-        bindService(bindIntent, mServiceConnection, Context.BIND_AUTO_CREATE);
+
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        unbindService(mServiceConnection);
     }
 
     @Override
@@ -108,7 +120,7 @@ public class MainActivity extends WearableActivity {
         Log.d("L-WL", "onDestroy: MainActivity");
         mBleService.disconnect();
         EventBus.getDefault().unregister(this);
-        unbindService(mServiceConnection);
+
         Handler handler = new Handler();
 //        handler.postDelayed(new Runnable() {
 //            @Override
