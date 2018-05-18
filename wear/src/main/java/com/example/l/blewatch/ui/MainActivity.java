@@ -20,10 +20,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.l.blewatch.R;
+import com.example.l.blewatch.base.BaseActivity;
 import com.example.l.blewatch.bean.eventbus.EventBleCommandSucceedBean;
 import com.example.l.blewatch.bean.eventbus.EventBleConnectSucceedBean;
+import com.example.l.blewatch.bean.eventbus.EventErrorBean;
 import com.example.l.blewatch.service.BleService;
 import com.example.l.blewatch.sharedPreferences.SPSettings;
+import com.example.l.blewatch.utils.ToastUtil;
 
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
@@ -36,7 +39,7 @@ import permissions.dispatcher.NeedsPermission;
 import permissions.dispatcher.RuntimePermissions;
 
 @RuntimePermissions
-public class MainActivity extends WearableActivity {
+public class MainActivity extends BaseActivity {
 
     @BindView(R.id.btn_unlock)
     Button mBtnUnlock;
@@ -47,7 +50,7 @@ public class MainActivity extends WearableActivity {
     @BindView(R.id.tv_ble_name)
     TextView mTvBleName;
 
-    private Vibrator mVibrator;
+
 
     private BleService mBleService;
 
@@ -93,7 +96,7 @@ public class MainActivity extends WearableActivity {
         // Enables Always-on
         setAmbientEnabled();
 
-        mVibrator = (Vibrator) getApplication().getSystemService(Service.VIBRATOR_SERVICE);
+
 
         mBleAddress = SPSettings.getString(SPSettings.KEY_BLE_ADDRESS, "");
         if (!TextUtils.isEmpty(mBleAddress)) {
@@ -102,33 +105,21 @@ public class MainActivity extends WearableActivity {
             mBtnLock.setVisibility(View.VISIBLE);
             mTvBleName.setVisibility(View.VISIBLE);
         }
-
-        // 注册 EventBus
-        EventBus.getDefault().register(this);
-
     }
 
     @Override
     protected void onStop() {
         super.onStop();
-        unbindService(mServiceConnection);
+
+        mBleService.disconnect();
+
     }
 
     @Override
     protected void onDestroy() {
 
-        Log.d("L-WL", "onDestroy: MainActivity");
-        mBleService.disconnect();
-        EventBus.getDefault().unregister(this);
+        unbindService(mServiceConnection);
 
-        Handler handler = new Handler();
-//        handler.postDelayed(new Runnable() {
-//            @Override
-//            public void run() {
-//                Intent intent = new Intent(MainActivity.this.getApplicationContext(), BleService.class);
-//                stopService(intent);
-//            }
-//        }, 1000);
         super.onDestroy();
     }
 
@@ -163,30 +154,72 @@ public class MainActivity extends WearableActivity {
         MainActivityPermissionsDispatcher.onRequestPermissionsResult(this, requestCode, grantResults);
     }
 
-    /**
-     * 命令执行反馈
-     *
-     * @param bean
-     */
+    //    /**
+//     * 命令执行反馈
+//     *
+//     * @param bean
+//     */
+//    @Subscribe(threadMode = ThreadMode.MAIN)
+//    public void onCommandSucceedEvent(EventBleCommandSucceedBean bean) {
+//        switch (bean.getSucceedState()) {
+//            case EventBleCommandSucceedBean.UNLOCK_SUCCEED:
+//                Toast.makeText(this, "开门成功", Toast.LENGTH_SHORT).show();
+//                break;
+//            case EventBleCommandSucceedBean.LOCK_SUCCEED:
+//                Toast.makeText(this, "关门成功", Toast.LENGTH_SHORT).show();
+//                break;
+//        }
+//    }
+//
+//    /**
+//     * 连接状态返回
+//     *
+//     * @param bean
+//     */
+//    @Subscribe(threadMode = ThreadMode.MAIN)
+//    public void onConnectSucceedEvent(EventBleConnectSucceedBean bean) {
+//        switch (bean.getConnectState()) {
+//            case EventBleConnectSucceedBean.BLE_CONNECT_SUCCEED:
+//                mBtnScan.setVisibility(View.GONE);
+//                mBtnUnlock.setVisibility(View.VISIBLE);
+//                mBtnLock.setVisibility(View.VISIBLE);
+//                mTvBleName.setVisibility(View.VISIBLE);
+//                mTvBleName.setText(bean.getBleName());
+//                break;
+//
+//            default:
+//        }
+//    }
+
+
     @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onCommandSucceedEvent(EventBleCommandSucceedBean bean) {
+    public void onSucceedEvent(Object obj) {
+        if (obj instanceof EventErrorBean) {
+            onErrorTranscoder((EventErrorBean) obj);
+        } else if (obj instanceof EventBleCommandSucceedBean) {
+            onCommandSucceed((EventBleCommandSucceedBean) obj);
+        } else if (obj instanceof EventBleConnectSucceedBean) {
+            onConnectSucceed((EventBleConnectSucceedBean) obj);
+        }
+    }
+
+    private void onErrorTranscoder(EventErrorBean bean) {
+        mVibrator.vibrate(new long[]{0, 50}, -1);
+        ToastUtil.shortShow(this, bean.getMessage());
+    }
+
+    private void onCommandSucceed(EventBleCommandSucceedBean bean) {
         switch (bean.getSucceedState()) {
             case EventBleCommandSucceedBean.UNLOCK_SUCCEED:
-                Toast.makeText(this, "开门成功", Toast.LENGTH_SHORT).show();
+                ToastUtil.shortShow(this, "开门成功");
                 break;
             case EventBleCommandSucceedBean.LOCK_SUCCEED:
-                Toast.makeText(this, "关门成功", Toast.LENGTH_SHORT).show();
+                ToastUtil.shortShow(this, "关门成功");
                 break;
         }
     }
 
-    /**
-     * 连接状态返回
-     *
-     * @param bean
-     */
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onConnectSucceedEvent(EventBleConnectSucceedBean bean) {
+    private void onConnectSucceed(EventBleConnectSucceedBean bean) {
         switch (bean.getConnectState()) {
             case EventBleConnectSucceedBean.BLE_CONNECT_SUCCEED:
                 mBtnScan.setVisibility(View.GONE);

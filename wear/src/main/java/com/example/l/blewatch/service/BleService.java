@@ -24,9 +24,11 @@ import android.util.Log;
 import com.example.l.blewatch.bean.eventbus.EventBleCommandSucceedBean;
 import com.example.l.blewatch.bean.eventbus.EventBleConnectSucceedBean;
 import com.example.l.blewatch.bean.eventbus.EventBleScanBean;
+import com.example.l.blewatch.bean.eventbus.EventErrorBean;
 import com.example.l.blewatch.ble.BLEParameters;
 import com.example.l.blewatch.ble.Command;
 import com.example.l.blewatch.sharedPreferences.SPSettings;
+import com.example.l.blewatch.utils.EventBusUtil;
 import com.example.l.blewatch.utils.HexUtil;
 
 import org.greenrobot.eventbus.EventBus;
@@ -53,7 +55,7 @@ public class BleService extends Service implements BluetoothAdapter.LeScanCallba
     private BluetoothManager mBluetoothManager = null;
     private BluetoothAdapter mBleAdapter = null;
     private BluetoothDevice mDevice;
-    public BluetoothGatt mGatt;
+    public BluetoothGatt mGatt = null;
     private BluetoothGattCharacteristic mSendChar;
     private Handler mHandler;
 
@@ -186,7 +188,7 @@ public class BleService extends Service implements BluetoothAdapter.LeScanCallba
         bleStopScan();
         mDeviceAddress = address;
         mDevice = mBleAdapter.getRemoteDevice(mDeviceAddress);
-        mGatt = mDevice.connectGatt(this, false, mGattCallback);
+        mDevice.connectGatt(this, false, mGattCallback);
     }
 
     public void connect(int position) {
@@ -227,12 +229,14 @@ public class BleService extends Service implements BluetoothAdapter.LeScanCallba
             switch (newState) {
                 case BluetoothProfile.STATE_CONNECTED:
                     Log.d("L-WL", "onConnectionStateChange: 连接成功");
+
                     gatt.discoverServices();
                     break;
 
                 case BluetoothProfile.STATE_DISCONNECTED:
                     Log.d("L-WL", "onConnectionStateChange: 连接断开");
 //                    connect(SPSettings.getString(SPSettings.KEY_BLE_ADDRESS, ""));
+                    mGatt = null;
                     break;
 
                 default:
@@ -264,8 +268,9 @@ public class BleService extends Service implements BluetoothAdapter.LeScanCallba
         @Override
         public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
             Log.d("L-WL", "requestIndication 结束!");
+            mGatt = gatt;
             SPSettings.put(SPSettings.KEY_BLE_ADDRESS, mDevice.getAddress());
-            EventBus.getDefault().post(new EventBleConnectSucceedBean(EventBleConnectSucceedBean.BLE_CONNECT_SUCCEED, mDevice.getName()));
+            EventBusUtil.sendMessage(new EventBleConnectSucceedBean(EventBleConnectSucceedBean.BLE_CONNECT_SUCCEED, mDevice.getName()));
         }
 
         @Override
@@ -288,7 +293,7 @@ public class BleService extends Service implements BluetoothAdapter.LeScanCallba
     };
 
     private void commandSucceed(int state) {
-        EventBus.getDefault().post(new EventBleCommandSucceedBean(state));
+        EventBusUtil.sendMessage(new EventBleCommandSucceedBean(state));
     }
 
     /**
@@ -318,7 +323,8 @@ public class BleService extends Service implements BluetoothAdapter.LeScanCallba
             Log.d("L-WL", "sendUnlock: ");
             mSendChar.setValue(Command.OBD_UNLOCK);
             mGatt.writeCharacteristic(mSendChar);
-
+        } else {
+            EventBusUtil.sendMessage(new EventErrorBean(404, "蓝牙未连接，请连接后再使用！"));
         }
     }
 
@@ -329,6 +335,8 @@ public class BleService extends Service implements BluetoothAdapter.LeScanCallba
         if (mBleAdapter.isEnabled() && mGatt != null) {
             mSendChar.setValue(Command.OBD_LOCK);
             mGatt.writeCharacteristic(mSendChar);
+        } else {
+            EventBusUtil.sendMessage(new EventErrorBean(404, "蓝牙未连接，请连接后再使用！"));
         }
     }
 
